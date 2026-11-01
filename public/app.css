@@ -1,0 +1,16 @@
+:root{--ink:#eaf6ff;--glass:rgba(255,255,255,.10);--edge:rgba(255,255,255,.22);--gold:#ffcf5c;--cyan:#36e0ff;--bad:#ff6a8a}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:"Poppins",system-ui,sans-serif;color:var(--ink);background:radial-gradient(circle at 20% 0,#2b2466,#0a1230 60%);padding:env(safe-area-inset-top) 16px 32px}
+.wrap{max-width:900px;margin:0 auto;padding-top:24px}.center{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:0 16px}
+.card{background:var(--glass);border:1px solid var(--edge);border-radius:18px;backdrop-filter:blur(14px);padding:22px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.auth{width:100%;max-width:380px}h1{margin:0 0 4px;font-size:30px}h2{font-size:18px;margin:0 0 12px}.muted{opacity:.7;font-size:14px}
+label{display:block;font-size:13px;margin:14px 0 4px;opacity:.85}
+input{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--edge);background:rgba(0,0,0,.25);color:var(--ink);font:inherit}
+input:focus{outline:2px solid var(--cyan)}
+button,.btn{font:inherit;font-weight:600;color:#1b1300;background:var(--gold);border:0;padding:11px 26px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-block}
+button.full{width:100%;margin-top:20px}button:disabled{opacity:.6}button.ghost{color:var(--ink);background:var(--glass);border:1px solid var(--edge);padding:10px 16px}
+.err{color:var(--bad);font-size:14px;min-height:20px;margin-top:12px}a{color:var(--cyan)}.btn{color:#1b1300}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat b{display:block;font-size:28px;color:var(--gold)}.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;padding:7px 4px;border-bottom:1px solid var(--edge)}th{opacity:.6;font-weight:600}.me{color:var(--gold)}

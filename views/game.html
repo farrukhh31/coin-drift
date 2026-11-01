@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Coin Drift</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --ink: #eaf6ff; --glass: rgba(255,255,255,0.10); --edge: rgba(255,255,255,0.22); --gold: #ffcf5c; --cyan: #36e0ff; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1230; overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+    body { font-family: "Poppins", system-ui, sans-serif; color: var(--ink); }
+    canvas { display: block; transition: filter 1.2s; }
+
+    /* ---------- HUD ---------- */
+    .hud { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; transition: opacity .6s; }
+    .left, .right { display: flex; gap: 12px; align-items: flex-start; }
+    .right { flex-direction: column; align-items: flex-end; }
+    .card { background: var(--glass); border: 1px solid var(--edge); border-radius: 18px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 12px 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    .big { font-size: 30px; font-weight: 700; line-height: 1.1; }
+    .score { color: var(--gold); display: inline-block; }
+    .score.pop { animation: pop .18s ease-out; }
+    @keyframes pop { from { transform: scale(1.4); } to { transform: scale(1); } }
+    .label { font-size: 13px; opacity: .75; margin-top: 4px; }
+    .bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.15); margin-top: 8px; overflow: hidden; }
+    .fill { height: 100%; width: 0; background: var(--gold); border-radius: 3px; transition: width .25s; }
+    .fill.cyan { background: var(--cyan); transition: none; width: 100%; }
+    .help { font-size: 14px; line-height: 1.9; min-width: 150px; }
+    kbd { background: rgba(255,255,255,.18); border-radius: 6px; padding: 2px 7px; margin-left: 4px; font-family: inherit; font-weight: 600; }
+    body[data-state="menu"] .hud, body[data-state="intro"] .hud { opacity: 0; }
+    body[data-state="gameover"] .hud { opacity: .2; }
+
+    /* ---------- Buttons ---------- */
+    button { font: inherit; font-weight: 600; color: #1b1300; background: var(--gold); border: 0; padding: 12px 28px; border-radius: 999px; cursor: pointer; box-shadow: 0 8px 22px rgba(255,207,92,.4); pointer-events: auto; }
+    button.ghost { color: var(--ink); background: var(--glass); border: 1px solid var(--edge); box-shadow: none; padding: 6px 16px; font-size: 13px; }
+    button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+    /* ---------- Cutscene: cinema bars, captions, skip ---------- */
+    .cine { position: fixed; left: 0; right: 0; height: 0; background: #000; z-index: 5; transition: height .9s ease; pointer-events: none; }
+    .cine.top { top: 0; } .cine.bottom { bottom: 0; }
+    body[data-state="menu"] .cine, body[data-state="intro"] .cine { height: 11vh; }
+    .caption { position: fixed; left: 0; right: 0; bottom: 18vh; z-index: 6; text-align: center; pointer-events: none; opacity: 0;
+      font-size: clamp(28px, 5vw, 54px); font-weight: 700; letter-spacing: .04em; text-shadow: 0 4px 24px rgba(0,0,0,.7); }
+    .caption.show { animation: caption 2.6s ease both; }
+    @keyframes caption { 0% { opacity: 0; transform: translateY(14px); } 20% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
+    #skip { display: none; position: fixed; right: 20px; bottom: calc(11vh + 16px); z-index: 7; }
+    body[data-state="intro"] #skip { display: block; }
+
+    /* ---------- Screens: ONE style for start, win, game over and pause ---------- */
+    .screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+      opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 1s, visibility 1s;
+      background: radial-gradient(circle at center, rgba(15,10,35,.35), rgba(var(--tint), .7)); backdrop-filter: blur(3px); }
+    .screen.show { opacity: 1; visibility: visible; pointer-events: auto; }
+    .tone-start { --tint: 60, 40, 150; }
+    .tone-win   { --tint: 150, 105, 10; }
+    .tone-lose  { --tint: 130, 10, 45; }
+    .tone-pause { --tint: 20, 50, 110; }
+    .screen-inner { text-align: center; max-width: 360px; padding: 0 24px; }
+    .screen h1 { margin: 6px 0 4px; font-size: 38px; }
+    .screen p { margin: 0 0 18px; opacity: .85; }
+    .screen button { margin-top: 22px; }
+    .result { font-size: 46px; font-weight: 700; color: var(--gold); line-height: 1.1; }
+    .badge { display: none; margin: 12px auto 0; width: fit-content; color: #1b1300; background: var(--gold); border-radius: 999px; padding: 4px 14px; font-size: 13px; font-weight: 600; }
+    .hint { font-size: 14px; line-height: 2; opacity: .9; }
+
+    body[data-state="gameover"] canvas { filter: grayscale(.85) brightness(.55); }
+    body[data-state="won"] canvas { filter: saturate(1.25) brightness(.8); }
+    body[data-state="paused"] canvas { filter: blur(3px) brightness(.6); }
+
+    /* Character */
+    .hero { width: 160px; height: auto; overflow: visible; animation: float 3s ease-in-out infinite; }
+    .tone-win .hero { animation: jump 1s ease-in-out infinite; }
+    .tilt { transform-origin: 80px 140px; animation: wobble 2.2s ease-in-out infinite; }
+    .dizzy { transform-origin: 80px 36px; animation: spin 2.4s linear infinite; }
+    .blink { transform-box: fill-box; transform-origin: center; animation: blink 4s infinite; }
+    .zzz { animation: float 2s ease-in-out infinite; }
+    @keyframes float { 50% { transform: translateY(-8px); } }
+    @keyframes jump { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-22px); } }
+    @keyframes wobble { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+
+    /* Stars (win screen) */
+    .stars { display: flex; justify-content: center; gap: 8px; margin: 4px 0 10px; font-size: 44px; line-height: 1; }
+    .stars span { color: rgba(255,255,255,.2); }
+    .stars span.on { color: var(--gold); text-shadow: 0 0 18px rgba(255,207,92,.8); animation: starPop .5s cubic-bezier(.3,1.6,.5,1) both; }
+    @keyframes starPop { from { transform: scale(0) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
+
+    /* Confetti */
+    #confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 11; }
+    #confetti i { position: absolute; top: -20px; width: 9px; height: 14px; border-radius: 2px; animation: confetti linear infinite; }
+    @keyframes confetti { to { transform: translateY(110vh) rotate(720deg); } }
+
+    /* ---------- Goals, hearts, level cards ---------- */
+    .hearts { color: #ff6a8a; letter-spacing: 2px; min-height: 1.1em; }
+    .goals { font-size: 13px; line-height: 1.5; max-width: 230px; }
+    .goals ul, .goal-list { list-style: none; margin: 4px 0 0; padding: 0; }
+    .goals li::before { content: "\25CB  "; opacity: .6; }
+    .goals li.ok::before { content: "\2713  "; color: #7dff9a; opacity: 1; }
+    .goals li.fail { opacity: .45; text-decoration: line-through; }
+    .goals li.fail::before { content: "\2717  "; color: #ff6a8a; }
+    .goal-list { font-size: 15px; line-height: 1.8; margin: 8px 0 12px; }
+    .goal-list li.ok { color: #7dff9a; }
+    .goal-list li.ok::before { content: "\2713  "; }
+    .goal-list li.fail { opacity: .5; }
+    .goal-list li.fail::before { content: "\2717  "; color: #ff6a8a; }
+    #power { position: fixed; right: calc(140px + env(safe-area-inset-right, 0px)); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); width: 72px; height: 72px; padding: 0; border-radius: 50%; z-index: 4; touch-action: none; background: var(--cyan); box-shadow: none; }
+    #b-enemy, #b-power { margin-top: 6px; }
+    @media (max-width: 640px) { .goals { font-size: 11px; max-width: 150px; } }
+
+    /* ---------- Touch controls ---------- */
+    .touch-only { display: none; }
+    .touch-ui { display: none; }
+    #stick { position: fixed; left: calc(28px + env(safe-area-inset-left, 0px)); bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+      width: 132px; height: 132px; border-radius: 50%; background: var(--glass); border: 1px solid var(--edge);
+      backdrop-filter: blur(10px); touch-action: none; z-index: 4; }
+    #knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+      background: var(--gold); box-shadow: 0 6px 18px rgba(255,207,92,.45); pointer-events: none; }
+    #dash { position: fixed; right: calc(32px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+      width: 92px; height: 92px; padding: 0; border-radius: 50%; z-index: 4; touch-action: none; color: var(--ink); box-shadow: none;
+      border: 1px solid var(--edge); --energy: 1;
+      background: conic-gradient(var(--cyan) calc(var(--energy) * 360deg), rgba(255,255,255,.12) 0); }
+    #dash::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: rgba(10,18,48,.85); z-index: -1; }
+    #dash { isolation: isolate; }
+
+    @media (pointer: coarse) {
+      .touch-only { display: revert; }
+      .desk-only, .help { display: none; }
+      body[data-state="playing"] .touch-ui { display: block; }
+    }
+
+    /* ---------- Small screens ---------- */
+    @media (max-width: 640px) {
+      .hud { gap: 8px; }
+      .left { gap: 8px; flex-direction: column; }
+      .card { padding: 8px 14px; border-radius: 14px; }
+      .big { font-size: 22px; }
+      .label { font-size: 12px; }
+      .screen h1 { font-size: 30px; }
+      .stars { font-size: 36px; }
+      .result { font-size: 38px; }
+      .hero { width: 130px; }
+    }
+
+    /* ---------- Short screens (phones held sideways) ---------- */
+    @media (max-height: 520px) {
+      .hero { width: 84px; }
+      .screen h1 { font-size: 24px; margin: 0; }
+      .screen p { margin-bottom: 8px; font-size: 13px; }
+      .screen button { margin-top: 10px; padding: 9px 22px; }
+      .stars { font-size: 28px; margin: 0 0 4px; }
+      .result { font-size: 30px; }
+      .hint { font-size: 12px; line-height: 1.6; }
+      .cine { max-height: 8vh; }
+      .left { flex-direction: row; }
+      #stick { width: 110px; height: 110px; }
+      #dash { width: 78px; height: 78px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+    }
+  </style>
+</head>
+<body data-state="menu">
+  <!-- The cube character, drawn once and reused on every screen -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="cubeGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#7ff0ff" /><stop offset="1" stop-color="#1aa8c9" />
+      </linearGradient>
+      <g id="cube-body">
+        <ellipse cx="80" cy="160" rx="40" ry="6" fill="rgba(0,0,0,.45)" />
+        <rect x="30" y="40" width="100" height="100" rx="18" fill="url(#cubeGrad)" />
+        <rect x="30" y="40" width="100" height="14" rx="7" fill="rgba(255,255,255,.35)" />
+      </g>
+    </defs>
+  </svg>
+
+  <!-- Cutscene elements -->
+  <div class="cine top"></div>
+  <div class="cine bottom"></div>
+  <div class="caption" id="caption"></div>
+  <button class="ghost" id="skip">Skip intro<span class="desk-only"> (Space)</span></button>
+
+  <!-- Score, timer and controls -->
+  <div class="hud">
+    <div class="left">
+      <div class="card">
+        <div class="big"><span class="score" id="score">0</span> / <span id="total">10</span></div>
+        <div class="bar"><div class="fill" id="fill"></div></div>
+        <div class="label">coins &middot; level <span id="lvl">1</span>/<span id="lvls">5</span> &middot; magnet <span id="mag">3</span> (click a coin, +2s)</div>
+      </div>
+      <div class="card">
+        <div class="big" id="time">0:00.0</div>
+        <div class="label"><span id="tmode">time</span> &middot; best <span id="best">--</span></div>
+      </div>
+      <div class="card">
+        <div class="big hearts" id="hearts"></div>
+        <div class="label" id="lname"></div>
+      </div>
+      <div class="card">
+        <div class="label"><b id="pname"></b> <span class="desk-only">[E]</span></div>
+        <div class="bar"><div class="fill cyan" id="pbar"></div></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="card goals" id="goals"></div>
+      <div class="card help">
+        Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><br />
+        Dash <kbd>Shift</kbd>
+        <div class="bar"><div class="fill cyan" id="stamina"></div></div>
+        Power <kbd>E</kbd><kbd>Space</kbd><br />
+        Pause <kbd>P</kbd>
+      </div>
+      <button class="ghost" id="mute">Sound on</button>
+      <button class="ghost" id="exit">Dashboard</button>
+      <button class="ghost touch-only" id="pause-btn">Pause</button>
+    </div>
+  </div>
+
+  <!-- START -->
+  <div class="screen tone-start show" id="start-screen">
+    <div class="screen-inner">
+      <svg class="hero" viewBox="0 -10 160 180" aria-hidden="true">
+        <use href="#cube-body" />
+        <g class="blink"><circle cx="62" cy="86" r="7" fill="#0a3a4a" /><circle cx="98" cy="86" r="7" fill="#0a3a4a" /></g>
+        <path d="M58 108q22 20 44 0" stroke="#0a3a4a" stroke-width="5" fill="none" stroke-linecap="round" />
+      </svg>
+      <h1>Coin Drift</h1>
+      <p>Clear 5 different worlds. Collect every coin, dodge the sentries and don't fall off the edge.</p>
+      <div class="hint">Tip: click a coin to magnet it (limited per level).</div>
+      <div class="hint desk-only">Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> &nbsp; Dash <kbd>Shift</kbd> &nbsp; Power <kbd>E</kbd></div>
+      <div class="hint touch-only">Drag the stick to move. Hold Dash to go faster. Tap Power for your world's ability.</div>
+      <button id="start">Start game</button>
+    </div>
+  </div>
+
+  <!-- WIN -->
+  <div class="screen tone-win" id="win">
+    <div class="screen-inner">
+      <svg class="hero" viewBox="0 -10 160 180" aria-hidden="true">
+        <use href="#cube-body" />
+        <polygon points="52,42 52,16 66,30 80,10 94,30 108,16 108,42" fill="#ffcf5c" stroke="#b37a00" stroke-width="3" stroke-linejoin="round" />
+        <path d="M50 92q10-16 20 0M90 92q10-16 20 0" stroke="#0a3a4a" stroke-width="5" fill="none" stroke-linecap="round" />
+        <path d="M58 106q22 28 44 0z" fill="#0a3a4a" />
+      </svg>
+      <h1>You did it!</h1>
+      <p>Every coin is yours.</p>
+      <div class="stars" id="stars"><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span></div>
+      <div class="result" id="final-time">0:00.0</div>
+      <div class="label">your time &nbsp; best <span id="win-best">--</span></div>
+      <div class="badge" id="new-best">New best time</div>
+      <div class="label" id="scorecard"></div>
+      <ul class="goal-list" id="win-goals"></ul>
+      <div class="badge" id="ach"></div>
+      <button id="again">Play again</button>
+    </div>
+  </div>
+
+  <!-- LEVEL BRIEFING -->
+  <div class="screen tone-start" id="brief">
+    <div class="screen-inner">
+      <div class="label" id="b-num"></div>
+      <h1 id="b-name"></h1>
+      <p id="b-blurb"></p>
+      <ul class="goal-list" id="b-goals"></ul>
+      <div class="hint" id="b-feat"></div>
+      <div class="hint" id="b-enemy"></div>
+      <div class="hint" id="b-power"></div>
+      <button id="b-go">Go!</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div class="screen tone-lose" id="gameover">
+    <div class="screen-inner">
+      <svg class="hero" viewBox="0 -10 160 180" aria-hidden="true">
+        <g class="tilt">
+          <use href="#cube-body" />
+          <path d="M52 78l14 14M66 78l-14 14M94 78l14 14M108 78l-14 14" stroke="#0a3a4a" stroke-width="5" stroke-linecap="round" />
+          <path d="M62 120q18-14 36 0" stroke="#0a3a4a" stroke-width="5" fill="none" stroke-linecap="round" />
+        </g>
+        <g class="dizzy" fill="#ffcf5c"><circle cx="36" cy="36" r="5" /><circle cx="124" cy="36" r="5" /><circle cx="80" cy="-8" r="5" /></g>
+      </svg>
+      <h1>Oops! You fell</h1>
+      <p>The cube slipped off the edge.</p>
+      <div class="result" id="over-coins">0 / 10</div>
+      <div class="label">coins collected</div>
+      <div class="label" id="over-card"></div>
+      <button id="retry">Try again</button>
+    </div>
+  </div>
+
+  <!-- PAUSE -->
+  <div class="screen tone-pause" id="pause">
+    <div class="screen-inner">
+      <svg class="hero" viewBox="0 -10 160 180" aria-hidden="true">
+        <use href="#cube-body" />
+        <path d="M52 88h20M88 88h20" stroke="#0a3a4a" stroke-width="5" stroke-linecap="round" />
+        <path d="M72 116h16" stroke="#0a3a4a" stroke-width="5" stroke-linecap="round" />
+        <text class="zzz" x="122" y="36" font-size="28" font-weight="700" fill="#eaf6ff">z</text>
+      </svg>
+      <h1>Paused</h1>
+      <p>Take a breath. The coins will wait.</p>
+      <button id="resume">Resume</button>
+    </div>
+  </div>
+
+  <!-- Touch controls (only shown on phones and tablets while playing) -->
+  <div class="touch-ui">
+    <div id="stick"><div id="knob"></div></div>
+    <button id="dash">Dash</button>
+    <button id="power">Power</button>
+  </div>
+
+  <div id="confetti"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/levels.js"></script>
+  <script src="/Coin.js"></script>
+</body>
+</html>
